@@ -7,7 +7,8 @@ def render_uploader() -> dict | None:
     uploaded_file = st.file_uploader(
         label="Drag and drop a PDF, or click Browse",
         type=["pdf"],
-        help="Maximum file size: 50 MB  •  Only PDF files are accepted",
+        help="Maximum file size: 50 MB",
+        max_upload_size=50
     )
 
     if uploaded_file is None:
@@ -17,16 +18,23 @@ def render_uploader() -> dict | None:
     with st.spinner("Reading your PDF… please wait"):
         file_path = save_uploaded_file(uploaded_file)
         extraction = extract_text_from_pdf(file_path)
+
+        if extraction.get("status") == "error":
+            st.error(f"❌ Error reading PDF: {extraction['error_message']}")
+            return None
+
         metadata = get_pdf_metadata(file_path)
 
     result = {
-        "file_path":  file_path,
-        "file_name":  uploaded_file.name,
-        "file_size":  uploaded_file.size,         
-        "page_count": extraction["page_count"],
-        "pages":      extraction["pages"],
-        "full_text":  extraction["full_text"],
-        "metadata":   metadata,
+        "file_path":            file_path,
+        "file_name":            uploaded_file.name,
+        "file_size":            uploaded_file.size,         
+        "page_count":           extraction["page_count"],
+        "total_words":          extraction["total_words"],
+        "has_extractable_text": extraction["has_extractable_text"],
+        "pages":                extraction["pages"],
+        "full_text":            extraction["full_text"],
+        "metadata":             metadata,
     }
 
     return result
@@ -44,9 +52,12 @@ def render_pdf_info(pdf_data: dict) -> None:
         st.metric("💾 Size", f"{size_kb} KB")
 
     with col3:
-        word_count = len(pdf_data["full_text"].split())
+        word_count = pdf_data.get("total_words", len(pdf_data["full_text"].split()))
         st.metric("📝 Words", f"{word_count:,}")
-        
+
+    if not pdf_data.get("has_extractable_text", True):
+        st.warning("⚠️ No selectable text found. This document may be scanned, image-based, or blank.")
+
     with st.expander("📋 PDF Metadata"):
         meta = pdf_data["metadata"]
         display_fields = {
@@ -67,19 +78,32 @@ def render_pdf_info(pdf_data: dict) -> None:
         if not any_shown:
             st.write("No metadata found in this PDF.")
 
-    with st.expander("🔍 Extracted Text Preview (first 1 000 characters)"):
-        preview = pdf_data["full_text"][:1000]
-        if preview.strip():
-            st.text_area(
-                label="Extracted text",
-                value=preview,
-                height=250,
-                disabled=True,
-                label_visibility="collapsed",
-            )
+    with st.expander("🔍 Extracted Text Preview"):
+        if not pdf_data.get("has_extractable_text", bool(pdf_data["full_text"].strip())):
+            st.warning("⚠️ No selectable text found. This document may be scanned, image-based, or blank.")
         else:
-            st.warning(
-                "⚠️ No text could be extracted. "
-                "This PDF might be image-based (scanned). "
-                "OCR support will be added in a future session."
-            )
+            pages = pdf_data.get("pages", [])
+            if pages and isinstance(pages[0], dict):
+                page_labels = [f"Page {p['page_number']} ({p['word_count']} words)" for p in pages]
+                selected_idx = st.selectbox(
+                    "Select page to preview:",
+                    options=range(len(pages)),
+                    format_func=lambda i: page_labels[i],
+                )
+                selected_page = pages[selected_idx]
+                st.caption(f"Page {selected_page['page_number']} of {pdf_data['page_count']} • {selected_page['word_count']} words • {selected_page['char_count']} characters")
+                st.text_area(
+                    label=f"Text content for Page {selected_page['page_number']}",
+                    value=selected_page["text"] if selected_page["text"] else "(Empty page)",
+                    height=250,
+                    disabled=True,
+                )
+            else:
+                preview = pdf_data["full_text"][:1000]
+                st.text_area(
+                    label="Extracted text",
+                    value=preview,
+                    height=250,
+                    disabled=True,
+                    label_visibility="collapsed",
+                )
