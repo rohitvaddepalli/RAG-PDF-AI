@@ -1,16 +1,3 @@
-"""
-app.py  ←  The entry point of the entire application.
-------
-Run with:
-    streamlit run app.py
-
-This file is intentionally kept SHORT.  All the heavy lifting lives in:
-    • utils/pdf_handler.py    →  reading / processing PDFs
-    • components/pdf_uploader.py →  the upload UI widget
-
-Rule of thumb: app.py only wires things together and sets up the page.
-"""
-
 import streamlit as st
 from components.pdf_uploader import render_uploader, render_pdf_info
 
