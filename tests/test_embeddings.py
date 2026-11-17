@@ -16,6 +16,7 @@ from utils.embeddings import (
     DEFAULT_MODEL_NAME,
     EMBEDDING_DIMENSION,
     generate_embeddings,
+    embed_query,
     load_embedding_model,
     validate_embeddings,
 )
@@ -37,7 +38,8 @@ class MockSentenceTransformer:
             "batch_size": batch_size,
             "show_progress_bar": show_progress_bar,
         })
-        # Return a 2D numpy array of shape (len(texts), dimension)
+        if isinstance(texts, str):
+            return np.ones(self.dimension, dtype=np.float32) * 0.42
         return np.ones((len(texts), self.dimension), dtype=np.float32) * 0.42
 
 
@@ -190,6 +192,28 @@ class TestEmbeddingsModule(unittest.TestCase):
     def test_cached_model_loader_is_lru_cached(self):
         """Verify load_embedding_model uses lru_cache."""
         self.assertTrue(hasattr(load_embedding_model, "cache_info"))
+
+    def test_embed_query_success(self):
+        """Verify embedding a single user question string."""
+        vec = embed_query("What is the main topic?", model=self.mock_model)
+        self.assertIsInstance(vec, list)
+        self.assertEqual(len(vec), EMBEDDING_DIMENSION)
+        self.assertIsInstance(vec[0], float)
+
+    def test_embed_query_empty_or_invalid_raises(self):
+        """Verify invalid query strings raise ValueError."""
+        with self.assertRaises(ValueError):
+            embed_query("", model=self.mock_model)
+        with self.assertRaises(ValueError):
+            embed_query("   ", model=self.mock_model)
+        with self.assertRaises(ValueError):
+            embed_query(None, model=self.mock_model)
+
+    def test_embed_query_dimension_mismatch_raises(self):
+        """Verify ValueError is raised if query embedding has wrong dimension."""
+        wrong_model = MockSentenceTransformer(dimension=128)
+        with self.assertRaises(ValueError):
+            embed_query("Valid query", model=wrong_model)
 
 
 if __name__ == "__main__":
