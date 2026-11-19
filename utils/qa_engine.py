@@ -3,11 +3,13 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 from google import genai
 from google.genai import types
+from dotenv import load_dotenv
+load_dotenv()
 
 from utils.embeddings import embed_query
 from utils.vector_store import VectorStore
 
-DEFAULT_GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+DEFAULT_GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 DEFAULT_TOP_K: int = 4
 DEFAULT_SCORE_THRESHOLD: float = 0.25
 
@@ -74,7 +76,7 @@ def classify_api_error(error: Exception, api_key: Optional[str] = None) -> Tuple
     elif any(term in err_lower for term in ("api key not found", "api_key_invalid", "unauthenticated", "invalid api key")):
         user_msg = "Authentication error: Gemini API key is missing or invalid. Please check your configuration."
     else:
-        user_msg = f"An error occurred while calling the Gemini API: {sanitized_err}"
+        user_msg = "The AI service could not process your request."
 
     return user_msg, sanitized_err
 
