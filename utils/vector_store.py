@@ -56,7 +56,6 @@ class VectorStore:
                     )
                     """
                 )
-                # Create an index on source to accelerate per-document queries and cleanup
                 conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);"
                 )
