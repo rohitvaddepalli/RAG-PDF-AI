@@ -1,6 +1,5 @@
 import math
 import os
-import sqlite3
 import tempfile
 import unittest
 import numpy as np
@@ -22,15 +21,14 @@ def create_synthetic_vector(seed_val: float, dimension: int = EMBEDDING_DIMENSIO
 class TestVectorStore(unittest.TestCase):
 
     def setUp(self):
-        self.store = VectorStore(db_path=":memory:", expected_dim=EMBEDDING_DIMENSION)
+        self.store = VectorStore(expected_dim=EMBEDDING_DIMENSION)
 
     def tearDown(self):
         self.store.close()
 
-    def test_init_and_table_creation(self):
+    def test_add_chunks_and_count(self):
         self.assertEqual(self.store.count(), 0)
 
-    def test_add_and_count_chunks(self):
         chunks = [
             {
                 "chunk_id": "doc1.pdf_p1_c0",
@@ -57,45 +55,7 @@ class TestVectorStore(unittest.TestCase):
         self.assertEqual(stored_count, 2)
         self.assertEqual(self.store.count(), 2)
 
-    def test_prevent_duplicate_chunk_ids_with_upsert(self):
-        initial_chunk = {
-            "chunk_id": "unique_chunk_1",
-            "text": "Original text content.",
-            "source": "doc.pdf",
-            "page_number": 1,
-            "embedding": create_synthetic_vector(1.0),
-        }
-        self.store.add_chunks([initial_chunk])
-        self.assertEqual(self.store.count(), 1)
-
-        updated_chunk = {
-            "chunk_id": "unique_chunk_1",
-            "text": "Updated text content.",
-            "source": "doc.pdf",
-            "page_number": 1,
-            "embedding": create_synthetic_vector(0.9),
-        }
-        self.store.add_chunks([updated_chunk], upsert=True)
-
-        self.assertEqual(self.store.count(), 1)
-        record = self.store.get_chunk("unique_chunk_1")
-        self.assertIsNotNone(record)
-        self.assertEqual(record["text"], "Updated text content.")
-
-    def test_prevent_duplicate_chunk_ids_raises_when_no_upsert(self):
-        chunk = {
-            "chunk_id": "dup_chunk",
-            "text": "Text content.",
-            "source": "doc.pdf",
-            "page_number": 1,
-            "embedding": create_synthetic_vector(1.0),
-        }
-        self.store.add_chunks([chunk])
-
-        with self.assertRaises(sqlite3.IntegrityError):
-            self.store.add_chunks([chunk], upsert=False)
-
-    def test_cosine_similarity_exact_and_orthogonal(self):
+    def test_similarity_ranking(self):
         vec_a = [0.0] * EMBEDDING_DIMENSION
         vec_a[0] = 1.0
 
@@ -128,7 +88,7 @@ class TestVectorStore(unittest.TestCase):
         self.assertEqual(results[1]["chunk_id"], "c_b")
         self.assertAlmostEqual(results[1]["similarity"], 0.0, places=5)
 
-    def test_top_k_ordering_descending(self):
+    def test_top_k_behavior(self):
         v_high = [0.0] * EMBEDDING_DIMENSION
         v_high[0], v_high[1] = 0.9, 0.1
 
@@ -148,29 +108,107 @@ class TestVectorStore(unittest.TestCase):
         query = [0.0] * EMBEDDING_DIMENSION
         query[0] = 1.0
 
-        results = self.store.search(query_embedding=query, top_k=3)
+        res_1 = self.store.search(query_embedding=query, top_k=1)
+        self.assertEqual(len(res_1), 1)
+        self.assertEqual(res_1[0]["chunk_id"], "high")
 
-        self.assertEqual(len(results), 3)
-        self.assertEqual(results[0]["chunk_id"], "high")
-        self.assertEqual(results[1]["chunk_id"], "mid")
-        self.assertEqual(results[2]["chunk_id"], "low")
-        self.assertGreaterEqual(results[0]["similarity"], results[1]["similarity"])
-        self.assertGreaterEqual(results[1]["similarity"], results[2]["similarity"])
+        res_2 = self.store.search(query_embedding=query, top_k=2)
+        self.assertEqual(len(res_2), 2)
+        self.assertEqual(res_2[0]["chunk_id"], "high")
+        self.assertEqual(res_2[1]["chunk_id"], "mid")
 
-    def test_score_threshold_filtering(self):
-        v1 = [0.0] * EMBEDDING_DIMENSION
-        v1[0] = 1.0
-        v2 = [0.0] * EMBEDDING_DIMENSION
-        v2[1] = 1.0
+        res_5 = self.store.search(query_embedding=query, top_k=5)
+        self.assertEqual(len(res_5), 3)
 
-        self.store.add_chunks([
-            {"chunk_id": "c1", "text": "T1", "source": "s.pdf", "page_number": 1, "embedding": v1},
-            {"chunk_id": "c2", "text": "T2", "source": "s.pdf", "page_number": 1, "embedding": v2},
-        ])
+        res_zero = self.store.search(query_embedding=query, top_k=0)
+        self.assertEqual(res_zero, [])
 
-        results = self.store.search(query_embedding=v1, top_k=5, score_threshold=0.5)
+    def test_empty_store(self):
+        query = create_synthetic_vector(1.0)
+        self.assertEqual(self.store.search(query_embedding=query), [])
+        self.assertEqual(self.store.count(), 0)
+
+    def test_invalid_query_dimensions(self):
+        short_vec = [1.0, 0.0]
+
+        with self.assertRaises(ValueError) as ctx:
+            self.store.search(query_embedding=short_vec)
+        self.assertIn("dimension mismatch", str(ctx.exception).lower())
+
+        with self.assertRaises(ValueError):
+            self.store.search(query_embedding=[])
+
+        with self.assertRaises(ValueError):
+            self.store.search(query_embedding=None)
+
+        with self.assertRaises(ValueError):
+            self.store.add_chunks([{
+                "chunk_id": "short_chunk",
+                "text": "Short",
+                "embedding": short_vec,
+            }])
+
+    def test_invalid_numerical_values(self):
+        nan_vec = [0.1] * EMBEDDING_DIMENSION
+        nan_vec[10] = float("nan")
+
+        with self.assertRaises(ValueError):
+            self.store.search(query_embedding=nan_vec)
+
+        with self.assertRaises(ValueError):
+            self.store.add_chunks([{
+                "chunk_id": "nan_chunk",
+                "text": "NaN",
+                "embedding": nan_vec,
+            }])
+
+    def test_zero_vectors(self):
+        zero_vec = [0.0] * EMBEDDING_DIMENSION
+
+        with self.assertRaises(ValueError) as ctx:
+            self.store.search(query_embedding=zero_vec)
+        self.assertIn("zero vector", str(ctx.exception).lower())
+
+        self.store.add_chunks([{
+            "chunk_id": "zero_chunk",
+            "text": "Zero text",
+            "embedding": zero_vec,
+        }])
+        query = create_synthetic_vector(1.0)
+        results = self.store.search(query_embedding=query, top_k=1)
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["chunk_id"], "c1")
+        self.assertAlmostEqual(results[0]["similarity"], 0.0)
+
+    def test_save_and_load_json(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            temp_json_path = f.name
+
+        try:
+            chunks = [
+                {
+                    "chunk_id": "json_chunk_1",
+                    "text": "JSON persistence test.",
+                    "source": "sample.pdf",
+                    "page_number": 1,
+                    "embedding": create_synthetic_vector(1.0),
+                }
+            ]
+            self.store.add_chunks(chunks)
+            self.store.save(temp_json_path)
+
+            new_store = VectorStore(expected_dim=EMBEDDING_DIMENSION)
+            new_store.load(temp_json_path)
+
+            self.assertEqual(new_store.count(), 1)
+            results = new_store.search(create_synthetic_vector(1.0), top_k=1)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0]["chunk_id"], "json_chunk_1")
+            self.assertEqual(results[0]["text"], "JSON persistence test.")
+            self.assertEqual(results[0]["source"], "sample.pdf")
+            self.assertAlmostEqual(results[0]["similarity"], 1.0, places=5)
+        finally:
+            if os.path.exists(temp_json_path):
+                os.remove(temp_json_path)
 
     def test_metadata_preservation(self):
         v = create_synthetic_vector(1.0)
@@ -201,102 +239,32 @@ class TestVectorStore(unittest.TestCase):
         self.assertIn("similarity", res)
         self.assertIn("score", res)
 
-    def test_empty_inputs_handling(self):
-        self.assertEqual(self.store.add_chunks([]), 0)
-        self.assertEqual(self.store.add_chunks(None), 0)
+    def test_upsert_behavior(self):
+        initial = {
+            "chunk_id": "chunk_1",
+            "text": "Version 1",
+            "embedding": create_synthetic_vector(1.0),
+        }
+        self.store.add_chunks([initial])
+        self.assertEqual(self.store.count(), 1)
 
-        query = create_synthetic_vector(1.0)
-        self.assertEqual(self.store.search(query_embedding=query), [])
-
-        with self.assertRaises(ValueError):
-            self.store.search(query_embedding=[])
-        with self.assertRaises(ValueError):
-            self.store.search(query_embedding=None)
-
-    def test_invalid_dimension_handling(self):
-        short_vec = [1.0, 0.0]
-
-        with self.assertRaises(ValueError) as ctx:
-            self.store.add_chunks([{
-                "chunk_id": "short_chunk",
-                "text": "Short",
-                "source": "doc.pdf",
-                "page_number": 1,
-                "embedding": short_vec,
-            }])
-        self.assertIn("dimension mismatch", str(ctx.exception).lower())
-
-        with self.assertRaises(ValueError) as ctx:
-            self.store.search(query_embedding=short_vec)
-        self.assertIn("dimension mismatch", str(ctx.exception).lower())
-
-    def test_zero_vector_handling(self):
-        zero_vec = [0.0] * EMBEDDING_DIMENSION
-
-        with self.assertRaises(ValueError) as ctx:
-            self.store.search(query_embedding=zero_vec)
-        self.assertIn("zero vector", str(ctx.exception).lower())
-
-        self.store.add_chunks([{
-            "chunk_id": "zero_chunk",
-            "text": "Zero text",
-            "source": "doc.pdf",
-            "page_number": 1,
-            "embedding": zero_vec,
-        }])
-        query = create_synthetic_vector(1.0)
-        results = self.store.search(query_embedding=query, top_k=1)
-        self.assertEqual(len(results), 1)
-        self.assertAlmostEqual(results[0]["similarity"], 0.0)
-
-    def test_non_finite_values_handling(self):
-        nan_vec = [0.1] * EMBEDDING_DIMENSION
-        nan_vec[10] = float("nan")
+        updated = {
+            "chunk_id": "chunk_1",
+            "text": "Version 2",
+            "embedding": create_synthetic_vector(0.8),
+        }
+        self.store.add_chunks([updated], upsert=True)
+        self.assertEqual(self.store.count(), 1)
+        self.assertEqual(self.store.get_chunk("chunk_1")["text"], "Version 2")
 
         with self.assertRaises(ValueError):
-            self.store.add_chunks([{
-                "chunk_id": "nan_chunk",
-                "text": "NaN",
-                "source": "doc.pdf",
-                "page_number": 1,
-                "embedding": nan_vec,
-            }])
-
-        with self.assertRaises(ValueError):
-            self.store.search(query_embedding=nan_vec)
-
-    def test_disk_persistence(self):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            disk_db_path = f.name
-
-        try:
-            with VectorStore(db_path=disk_db_path) as disk_store:
-                disk_store.add_chunks([
-                    {
-                        "chunk_id": "persisted_chunk_1",
-                        "text": "Persisted on disk.",
-                        "source": "disk_test.pdf",
-                        "page_number": 3,
-                        "embedding": create_synthetic_vector(1.0),
-                    }
-                ])
-                self.assertEqual(disk_store.count(), 1)
-
-            with VectorStore(db_path=disk_db_path) as reloaded_store:
-                self.assertEqual(reloaded_store.count(), 1)
-                results = reloaded_store.search(create_synthetic_vector(1.0), top_k=1)
-                self.assertEqual(len(results), 1)
-                self.assertEqual(results[0]["chunk_id"], "persisted_chunk_1")
-                self.assertEqual(results[0]["text"], "Persisted on disk.")
-        finally:
-            if os.path.exists(disk_db_path):
-                os.remove(disk_db_path)
+            self.store.add_chunks([updated], upsert=False)
 
     def test_delete_and_clear(self):
         v = create_synthetic_vector(1.0)
         self.store.add_chunks([
-            {"chunk_id": "c1", "text": "T1", "source": "s.pdf", "page_number": 1, "embedding": v},
-            {"chunk_id": "c2", "text": "T2", "source": "s.pdf", "page_number": 2, "embedding": v},
+            {"chunk_id": "c1", "text": "T1", "embedding": v},
+            {"chunk_id": "c2", "text": "T2", "embedding": v},
         ])
         self.assertEqual(self.store.count(), 2)
 

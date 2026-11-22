@@ -1,7 +1,6 @@
 import json
 import math
 import os
-import sqlite3
 from typing import Any, Dict, List, Optional
 import numpy as np
 
@@ -11,57 +10,21 @@ from utils.embeddings import EMBEDDING_DIMENSION
 class VectorStore:
     def __init__(
         self,
-        db_path: str = "vector_store.db",
         expected_dim: int = EMBEDDING_DIMENSION,
+        file_path: Optional[str] = None,
+        db_path: Optional[str] = None,
     ):
-        self.db_path = db_path
         self.expected_dim = expected_dim
+        self.file_path = file_path or (db_path if db_path != ":memory:" else None)
+        self.chunks: List[Dict[str, Any]] = []
+        self._matrix: Optional[np.ndarray] = None
 
-        if self.db_path == ":memory:":
-            self._memory_conn: Optional[sqlite3.Connection] = sqlite3.connect(
-                ":memory:", check_same_thread=False
-            )
-            self._memory_conn.row_factory = sqlite3.Row
-        else:
-            self._memory_conn = None
-            dir_name = os.path.dirname(self.db_path)
-            if dir_name:
-                os.makedirs(dir_name, exist_ok=True)
-
-        self._init_db()
-
-    def _get_connection(self) -> sqlite3.Connection:
-        if self._memory_conn is not None:
-            return self._memory_conn
-
-        conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_db(self) -> None:
-        conn = self._get_connection()
-        try:
-            with conn:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS chunks (
-                        chunk_id TEXT PRIMARY KEY,
-                        text TEXT NOT NULL,
-                        source TEXT NOT NULL,
-                        page_number INTEGER NOT NULL,
-                        chunk_index INTEGER,
-                        word_count INTEGER,
-                        char_count INTEGER,
-                        embedding TEXT NOT NULL
-                    )
-                    """
-                )
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);"
-                )
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+    def _rebuild_matrix(self) -> None:
+        if not self.chunks:
+            self._matrix = None
+            return
+        vectors = [chunk["embedding"] for chunk in self.chunks]
+        self._matrix = np.array(vectors, dtype=np.float32)
 
     def add_chunks(
         self,
@@ -71,91 +34,57 @@ class VectorStore:
         if not chunks:
             return 0
 
-        prepared_records = []
+        added_count = 0
+        chunk_map = {c["chunk_id"]: idx for idx, c in enumerate(self.chunks) if "chunk_id" in c}
+
         for idx, chunk in enumerate(chunks):
             if not isinstance(chunk, dict):
                 raise ValueError(f"Chunk at index {idx} must be a dictionary.")
 
             chunk_id = chunk.get("chunk_id")
             text = chunk.get("text")
-            source = chunk.get("source")
-            page_number = chunk.get("page_number")
             embedding = chunk.get("embedding")
 
-            if not chunk_id or not isinstance(chunk_id, str):
-                raise ValueError(f"Chunk at index {idx} has an invalid or missing 'chunk_id'.")
             if not text or not isinstance(text, str):
-                raise ValueError(f"Chunk '{chunk_id}' has invalid or missing 'text'.")
-            if not source or not isinstance(source, str):
-                raise ValueError(f"Chunk '{chunk_id}' has invalid or missing 'source'.")
-            if page_number is None or not isinstance(page_number, int):
-                raise ValueError(f"Chunk '{chunk_id}' has invalid or missing 'page_number'.")
+                raise ValueError(f"Chunk at index {idx} has invalid or missing 'text'.")
             if embedding is None or not isinstance(embedding, (list, tuple, np.ndarray)):
-                raise ValueError(f"Chunk '{chunk_id}' has invalid or missing 'embedding'.")
+                raise ValueError(f"Chunk at index {idx} has invalid or missing 'embedding'.")
 
             if len(embedding) != self.expected_dim:
                 raise ValueError(
-                    f"Embedding dimension mismatch in chunk '{chunk_id}': "
-                    f"expected {self.expected_dim}, got {len(embedding)}."
+                    f"Embedding dimension mismatch: expected {self.expected_dim}, got {len(embedding)}."
                 )
 
-            for dim_idx, val in enumerate(embedding):
-                if not isinstance(val, (int, float, np.floating, np.integer)) or not math.isfinite(val):
+            emb_list = [float(v) for v in embedding]
+            for dim_idx, val in enumerate(emb_list):
+                if not math.isfinite(val):
                     raise ValueError(
-                        f"Non-finite float value ({val}) in chunk '{chunk_id}' at dimension {dim_idx}."
+                        f"Non-finite float value ({val}) at dimension {dim_idx}."
                     )
 
-            chunk_index = chunk.get("chunk_index", 0)
-            word_count = chunk.get("word_count", len(text.split()))
-            char_count = chunk.get("char_count", len(text))
-            embedding_json = json.dumps([float(v) for v in embedding])
+            cleaned_chunk = dict(chunk)
+            cleaned_chunk["embedding"] = emb_list
 
-            prepared_records.append((
-                chunk_id,
-                text,
-                source,
-                page_number,
-                chunk_index,
-                word_count,
-                char_count,
-                embedding_json,
-            ))
+            if chunk_id and chunk_id in chunk_map:
+                if upsert:
+                    existing_idx = chunk_map[chunk_id]
+                    self.chunks[existing_idx] = cleaned_chunk
+                    added_count += 1
+                else:
+                    raise ValueError(f"Duplicate chunk_id '{chunk_id}' already exists.")
+            else:
+                if chunk_id:
+                    chunk_map[chunk_id] = len(self.chunks)
+                self.chunks.append(cleaned_chunk)
+                added_count += 1
 
-        sql = (
-            """
-            INSERT INTO chunks (
-                chunk_id, text, source, page_number, chunk_index, word_count, char_count, embedding
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(chunk_id) DO UPDATE SET
-                text = excluded.text,
-                source = excluded.source,
-                page_number = excluded.page_number,
-                chunk_index = excluded.chunk_index,
-                word_count = excluded.word_count,
-                char_count = excluded.char_count,
-                embedding = excluded.embedding
-            """
-            if upsert
-            else """
-            INSERT INTO chunks (
-                chunk_id, text, source, page_number, chunk_index, word_count, char_count, embedding
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-        )
-
-        conn = self._get_connection()
-        try:
-            with conn:
-                conn.executemany(sql, prepared_records)
-            return len(prepared_records)
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+        self._rebuild_matrix()
+        return added_count
 
     def search(
         self,
         query_embedding: List[float],
-        top_k: int = 5,
+        top_k: int = 3,
         score_threshold: Optional[float] = None,
         source_filter: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -176,135 +105,101 @@ class VectorStore:
         if query_norm == 0.0 or math.isclose(query_norm, 0.0, abs_tol=1e-9):
             raise ValueError("Query embedding cannot be a zero vector (norm is 0).")
 
-        if top_k <= 0:
+        if not self.chunks or top_k <= 0 or self._matrix is None:
             return []
 
-        conn = self._get_connection()
-        try:
-            if source_filter:
-                cursor = conn.execute(
-                    """
-                    SELECT chunk_id, text, source, page_number, chunk_index, word_count, char_count, embedding
-                    FROM chunks WHERE source = ?
-                    """,
-                    (source_filter,),
-                )
-            else:
-                cursor = conn.execute(
-                    """
-                    SELECT chunk_id, text, source, page_number, chunk_index, word_count, char_count, embedding
-                    FROM chunks
-                    """
-                )
-            rows = cursor.fetchall()
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+        filtered_indices = []
+        for idx, chunk in enumerate(self.chunks):
+            if source_filter and chunk.get("source") != source_filter:
+                continue
+            filtered_indices.append(idx)
 
-        if not rows:
+        if not filtered_indices:
             return []
 
-        matrix = np.array([json.loads(row["embedding"]) for row in rows], dtype=np.float32)
-
+        matrix = self._matrix[filtered_indices]
         chunk_norms = np.linalg.norm(matrix, axis=1)
 
         with np.errstate(divide="ignore", invalid="ignore"):
-            similarities = np.dot(matrix, query_arr) / (chunk_norms * query_norm)
+            dots = np.dot(matrix, query_arr)
+            denominators = chunk_norms * query_norm
+            similarities = np.where(denominators > 1e-9, dots / denominators, 0.0)
             similarities = np.nan_to_num(similarities, nan=0.0, posinf=0.0, neginf=0.0)
+            similarities = np.clip(similarities, -1.0, 1.0)
 
-        similarities = np.clip(similarities, -1.0, 1.0)
-
-        sorted_indices = np.argsort(-similarities)
+        sorted_order = np.argsort(-similarities)
 
         results: List[Dict[str, Any]] = []
-        for idx in sorted_indices:
-            score = float(similarities[idx])
+        for pos in sorted_order:
+            score = float(similarities[pos])
             if score_threshold is not None and score < score_threshold:
                 continue
 
-            row = rows[idx]
-            results.append({
-                "chunk_id": row["chunk_id"],
-                "text": row["text"],
-                "source": row["source"],
-                "page_number": row["page_number"],
-                "chunk_index": row["chunk_index"],
-                "word_count": row["word_count"],
-                "char_count": row["char_count"],
-                "similarity": score,
-                "score": score,
-            })
+            orig_idx = filtered_indices[pos]
+            chunk_copy = dict(self.chunks[orig_idx])
+            chunk_copy["similarity"] = score
+            chunk_copy["score"] = score
+            results.append(chunk_copy)
 
             if len(results) >= top_k:
                 break
 
         return results
 
-    def get_chunk(self, chunk_id: str) -> Optional[Dict[str, Any]]:
-        conn = self._get_connection()
-        try:
-            cursor = conn.execute(
-                """
-                SELECT chunk_id, text, source, page_number, chunk_index, word_count, char_count, embedding
-                FROM chunks WHERE chunk_id = ?
-                """,
-                (chunk_id,),
-            )
-            row = cursor.fetchone()
-            if not row:
-                return None
+    def save(self, filepath: Optional[str] = None) -> None:
+        target_path = filepath or self.file_path
+        if not target_path:
+            raise ValueError("No file path specified for saving.")
 
-            return {
-                "chunk_id": row["chunk_id"],
-                "text": row["text"],
-                "source": row["source"],
-                "page_number": row["page_number"],
-                "chunk_index": row["chunk_index"],
-                "word_count": row["word_count"],
-                "char_count": row["char_count"],
-                "embedding": json.loads(row["embedding"]),
-            }
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+        dir_name = os.path.dirname(target_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
 
-    def delete_chunk(self, chunk_id: str) -> bool:
-        conn = self._get_connection()
-        try:
-            with conn:
-                cursor = conn.execute("DELETE FROM chunks WHERE chunk_id = ?", (chunk_id,))
-                return cursor.rowcount > 0
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+        with open(target_path, "w", encoding="utf-8") as f:
+            json.dump(self.chunks, f, indent=2)
+
+    def load(self, filepath: Optional[str] = None) -> None:
+        target_path = filepath or self.file_path
+        if not target_path:
+            raise ValueError("No file path specified for loading.")
+
+        if not os.path.exists(target_path):
+            raise FileNotFoundError(f"Vector store file not found: {target_path}")
+
+        with open(target_path, "r", encoding="utf-8") as f:
+            loaded_chunks = json.load(f)
+
+        if not isinstance(loaded_chunks, list):
+            raise ValueError("Invalid format: expected a JSON list of chunks.")
+
+        self.chunks = []
+        self.add_chunks(loaded_chunks)
 
     def count(self, source_filter: Optional[str] = None) -> int:
-        conn = self._get_connection()
-        try:
-            if source_filter:
-                cursor = conn.execute(
-                    "SELECT COUNT(*) FROM chunks WHERE source = ?", (source_filter,)
-                )
-            else:
-                cursor = conn.execute("SELECT COUNT(*) FROM chunks")
-            return cursor.fetchone()[0]
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+        if source_filter:
+            return sum(1 for c in self.chunks if c.get("source") == source_filter)
+        return len(self.chunks)
+
+    def get_chunk(self, chunk_id: str) -> Optional[Dict[str, Any]]:
+        for chunk in self.chunks:
+            if chunk.get("chunk_id") == chunk_id:
+                return dict(chunk)
+        return None
+
+    def delete_chunk(self, chunk_id: str) -> bool:
+        for idx, chunk in enumerate(self.chunks):
+            if chunk.get("chunk_id") == chunk_id:
+                del self.chunks[idx]
+                self._rebuild_matrix()
+                return True
+        return False
 
     def clear(self) -> None:
-        conn = self._get_connection()
-        try:
-            with conn:
-                conn.execute("DELETE FROM chunks")
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+        self.chunks = []
+        self._matrix = None
 
     def close(self) -> None:
-        if self._memory_conn is not None:
-            self._memory_conn.close()
-            self._memory_conn = None
+        pass
 
     def __enter__(self):
         return self
