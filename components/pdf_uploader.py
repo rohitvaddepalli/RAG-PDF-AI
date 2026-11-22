@@ -4,16 +4,26 @@ from utils.pdf_handler import save_uploaded_file, extract_text_from_pdf, get_pdf
 
 def render_uploader() -> dict | None:
     st.header("📄 Upload your PDF")
+    
+    uploader_key = f"uploader_{st.session_state.get('uploader_key', 0)}"
     uploaded_file = st.file_uploader(
         label="Drag and drop a PDF, or click Browse",
         type=["pdf"],
         help="Maximum file size: 50 MB",
-        max_upload_size=50
+        max_upload_size=50,
+        key=uploader_key,
     )
 
     if uploaded_file is None:
+        st.session_state.pop("cached_pdf_data", None)
+        st.session_state.pop("cached_upload_key", None)
         st.info("👆 Upload a PDF to get started.")
         return None
+
+    # Check session cache so extraction is never re-run on simple widget reruns
+    file_id = getattr(uploaded_file, "file_id", None) or f"{uploaded_file.name}_{uploaded_file.size}"
+    if st.session_state.get("cached_upload_key") == file_id and "cached_pdf_data" in st.session_state:
+        return st.session_state["cached_pdf_data"]
 
     with st.spinner("Reading your PDF… please wait"):
         file_path = save_uploaded_file(uploaded_file)
@@ -36,6 +46,9 @@ def render_uploader() -> dict | None:
         "full_text":            extraction["full_text"],
         "metadata":             metadata,
     }
+
+    st.session_state["cached_upload_key"] = file_id
+    st.session_state["cached_pdf_data"] = result
 
     return result
 

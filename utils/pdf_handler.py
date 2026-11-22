@@ -1,15 +1,17 @@
+import hashlib
 import os
 from typing import Any, Dict, List
 import fitz
-import uuid
 
 
 def save_uploaded_file(uploaded_file, save_dir: str = "uploads") -> str:
     os.makedirs(save_dir, exist_ok=True)
-    safe_name = f"{uuid.uuid4().hex}.pdf"
-    file_path = os.path.join(save_dir, safe_name)
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    buffer = uploaded_file.getbuffer()
+    file_hash = hashlib.sha256(buffer).hexdigest()
+    file_path = os.path.join(save_dir, f"{file_hash}.pdf")
+    if not os.path.exists(file_path):
+        with open(file_path, "wb") as f:
+            f.write(buffer)
     return file_path
 
 

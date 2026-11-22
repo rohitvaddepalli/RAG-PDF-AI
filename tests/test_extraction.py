@@ -2,10 +2,29 @@ import os
 import tempfile
 import unittest
 import fitz
-from utils.pdf_handler import extract_text_from_pdf, get_pdf_metadata
+from utils.pdf_handler import extract_text_from_pdf, get_pdf_metadata, save_uploaded_file
 
 
 class TestPDFExtraction(unittest.TestCase):
+
+    def test_save_uploaded_file_deterministic_hash(self):
+        class DummyUpload:
+            def __init__(self, data: bytes):
+                self._data = data
+            def getbuffer(self):
+                return self._data
+
+        dummy = DummyUpload(b"%PDF-1.4 dummy content for hash test")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path1 = save_uploaded_file(dummy, save_dir=tmpdir)
+            path2 = save_uploaded_file(dummy, save_dir=tmpdir)
+            self.assertEqual(path1, path2)
+            self.assertTrue(os.path.exists(path1))
+            filename = os.path.basename(path1)
+            import hashlib
+            expected_hash = hashlib.sha256(b"%PDF-1.4 dummy content for hash test").hexdigest()
+            self.assertEqual(filename, f"{expected_hash}.pdf")
+
 
     def test_normal_pdf_extraction(self):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:

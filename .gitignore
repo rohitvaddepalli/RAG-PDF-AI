@@ -9,6 +9,8 @@ venv/
 .venv/
 env/
 
+.pytest_cache/
+
 uploads/*
 !uploads/.gitkeep
 
@@ -18,3 +20,4 @@ uploads/*
 Thumbs.db
 .env
 .superpowers/
+.agent.json
