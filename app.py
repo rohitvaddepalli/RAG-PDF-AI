@@ -96,12 +96,16 @@ def main():
 
         st.markdown("---")
         if st.button("🔄 Reset Document & Chat", use_container_width=True):
+            st.session_state["uploader_key"] = st.session_state.get("uploader_key", 0) + 1
             for k in [
                 "pdf_data",
+                "cached_pdf_data",
+                "cached_upload_key",
                 "vector_store",
                 "indexed_file",
                 "query_history",
                 "active_query_result",
+                "user_query_input",
                 "suggested_prompt",
             ]:
                 if k in st.session_state:

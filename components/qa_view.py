@@ -82,42 +82,45 @@ def render_qa_section(
     st.header("💬 Ask a Question")
     st.caption("Ask specific questions about the uploaded PDF. Answers are strictly grounded in retrieved document excerpts.")
 
+    # Upfront API key check
+    if not api_key:
+        st.warning("⚠️ No Gemini API key detected. Please configure GEMINI_API_KEY in .env or enter it in the sidebar before asking questions.")
+
     # Initialize session state keys if absent
     if "query_history" not in st.session_state:
         st.session_state["query_history"] = []
     if "active_query_result" not in st.session_state:
         st.session_state["active_query_result"] = None
-    if "suggested_prompt" not in st.session_state:
-        st.session_state["suggested_prompt"] = ""
+    if "user_query_input" not in st.session_state:
+        st.session_state["user_query_input"] = ""
 
     # Quick Prompt Pills
     st.markdown("**Quick Prompts:**")
     pill_col1, pill_col2, pill_col3 = st.columns(3)
     with pill_col1:
         if st.button("📌 Summarize Key Takeaways", use_container_width=True):
-            st.session_state["suggested_prompt"] = "Summarize the key takeaways and main points of this document."
+            st.session_state["user_query_input"] = "Summarize the key takeaways and main points of this document."
+            st.rerun()
     with pill_col2:
         if st.button("📊 Extract Core Findings", use_container_width=True):
-            st.session_state["suggested_prompt"] = "What are the most significant findings, metrics, or conclusions?"
+            st.session_state["user_query_input"] = "What are the most significant findings, metrics, or conclusions?"
+            st.rerun()
     with pill_col3:
         if st.button("🎯 Next Steps & Actions", use_container_width=True):
-            st.session_state["suggested_prompt"] = "What next steps, recommendations, or actions are outlined in this document?"
+            st.session_state["user_query_input"] = "What next steps, recommendations, or actions are outlined in this document?"
+            st.rerun()
 
     # Query Input Form
     with st.form("single_query_form", clear_on_submit=False):
-        default_val = st.session_state.get("suggested_prompt", "")
         user_query = st.text_area(
             label="Enter your question:",
-            value=default_val,
+            key="user_query_input",
             placeholder="e.g., What are the main objectives described in Section 2?",
             height=90,
         )
         submitted = st.form_submit_button("🔎 Ask AI Assistant", use_container_width=True)
 
     if submitted:
-        # Clear suggested prompt once submitted
-        st.session_state["suggested_prompt"] = ""
-
         clean_query = user_query.strip() if user_query else ""
         if not clean_query:
             st.warning("⚠️ Please enter a question to ask the document.")
