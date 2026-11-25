@@ -185,7 +185,6 @@ async def ask_question(payload: AskRequest) -> AskResponse:
         )
 
     top_k = payload.top_k or settings.DEFAULT_TOP_K
-    # Bypass threshold for broad overview/summary queries so top-K context reaches Gemini
     threshold = -1.0 if _is_overview_query(cleaned_question) else settings.RELEVANCE_THRESHOLD
     try:
         retrieved_chunks = document_store.search(

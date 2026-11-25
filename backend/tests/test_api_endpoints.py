@@ -75,7 +75,6 @@ def test_ask_missing_document(client):
 
 
 def test_ask_empty_question(client):
-    # First upload a doc
     pdf_bytes = create_dummy_pdf("Machine learning models.")
     upload_res = client.post("/api/upload", files={"file": ("ml.pdf", pdf_bytes, "application/pdf")})
     doc_id = upload_res.json()["document_id"]
@@ -88,12 +87,10 @@ def test_ask_empty_question(client):
 
 
 def test_ask_below_threshold_returns_fallback_without_llm(client):
-    # Upload doc about cooking recipes
     pdf_bytes = create_dummy_pdf("Ingredients: Flour, sugar, butter, and vanilla extract for baking cakes.")
     upload_res = client.post("/api/upload", files={"file": ("recipe.pdf", pdf_bytes, "application/pdf")})
     doc_id = upload_res.json()["document_id"]
 
-    # Ask unrelated question with very high threshold mock or completely orthogonal question
     with patch("app.services.llm_service.llm_service.generate_answer") as mock_llm:
         response = client.post("/api/ask", json={
             "document_id": doc_id,
@@ -104,7 +101,6 @@ def test_ask_below_threshold_returns_fallback_without_llm(client):
         data = response.json()
         assert data["answer"] == "I couldn't find this in the document"
         assert data["sources"] == []
-        # Ensure LLM was NOT called
         mock_llm.assert_not_called()
 
 

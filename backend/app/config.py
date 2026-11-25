@@ -16,9 +16,9 @@ class Settings:
     )
     RELEVANCE_THRESHOLD: float = float(os.getenv("RELEVANCE_THRESHOLD", "0.20"))
     DEFAULT_TOP_K: int = int(os.getenv("DEFAULT_TOP_K", "4"))
-    MAX_FILE_SIZE_BYTES: int = 20 * 1024 * 1024  # 20 MB
+    MAX_FILE_SIZE_BYTES: int = 20 * 1024 * 1024
 
-    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "650"))  # 500-800 characters
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "650"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
 
 

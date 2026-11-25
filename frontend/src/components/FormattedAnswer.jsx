@@ -68,7 +68,6 @@ export default function FormattedAnswer({ text }) {
       continue;
     }
 
-    // Standalone bold line acting as a section heading (e.g. **React Fundamentals**)
     if (/^\*\*[^*]+\*\*:?$/.test(trimmed)) {
       blocks.push(
         <h4 key={blocks.length} className="answer-heading">

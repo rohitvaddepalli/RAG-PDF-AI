@@ -39,8 +39,6 @@ body {
   flex-direction: column;
   min-height: 100vh;
 }
-
-/* Header */
 .header {
   display: flex;
   align-items: center;
@@ -108,8 +106,6 @@ body {
   border-radius: 50%;
   background: currentColor;
 }
-
-/* Main Cards */
 .main-content {
   display: flex;
   flex-direction: column;
@@ -161,8 +157,6 @@ body {
   align-items: center;
   gap: 4px;
 }
-
-/* Upload Section */
 .dropzone {
   border: 2px dashed var(--border-color);
   border-radius: var(--radius);
@@ -257,8 +251,6 @@ body {
   font-size: 0.8rem;
   color: #15803d;
 }
-
-/* Chat Section */
 .disabled-card {
   opacity: 0.65;
   pointer-events: none;
@@ -316,8 +308,6 @@ body {
   color: var(--primary);
   background: #eff6ff;
 }
-
-/* Input Form */
 .ask-form {
   margin-bottom: 20px;
 }
@@ -344,8 +334,6 @@ body {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
-
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -402,8 +390,6 @@ body {
 .send-btn {
   height: 48px;
 }
-
-/* Alerts */
 .alert {
   padding: 12px 16px;
   border-radius: var(--radius);
@@ -419,8 +405,6 @@ body {
   border: 1px solid #fecaca;
   color: #991b1b;
 }
-
-/* Answers & Citations */
 .history-list {
   display: flex;
   flex-direction: column;
@@ -539,8 +523,6 @@ body {
   padding: 1px 5px;
   border-radius: 4px;
 }
-
-/* Sources */
 .sources-container {
   margin-top: 14px;
   padding-top: 14px;
@@ -602,8 +584,6 @@ body {
   font-style: italic;
   line-height: 1.45;
 }
-
-/* Footer */
 .footer {
   margin-top: 36px;
   text-align: center;
@@ -612,8 +592,6 @@ body {
   border-top: 1px solid var(--border-color);
   padding-top: 20px;
 }
-
-/* Animations */
 .spinner {
   animation: spin 1s linear infinite;
 }

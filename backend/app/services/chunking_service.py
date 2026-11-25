@@ -3,7 +3,7 @@
 from typing import Any, Dict, List
 import re
 
-DEFAULT_CHUNK_SIZE: int = 650  # Between 500 and 800 characters
+DEFAULT_CHUNK_SIZE: int = 650
 DEFAULT_CHUNK_OVERLAP: int = 100
 
 
@@ -38,7 +38,6 @@ def split_text_recursive(
 
         for delimiter in ["\n\n", "\n", ". ", "? ", "! ", "; ", " "]:
             last_idx = slice_window.rfind(delimiter)
-            # Ensure the delimiter isn't too close to the beginning of the chunk
             if last_idx > int(chunk_size * 0.4):
                 split_pos = last_idx + len(delimiter)
                 break
@@ -52,7 +51,6 @@ def split_text_recursive(
             chunks.append(cleaned_text[start:end].strip())
             start = end - chunk_overlap
 
-        # Prevent infinite loop on edge cases
         if start <= 0 or start >= text_len:
             break
 

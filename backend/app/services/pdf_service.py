@@ -1,7 +1,7 @@
 """Service for extracting and validating text from PDF documents using PyMuPDF."""
 
 from typing import Any, Dict, List
-import fitz  # PyMuPDF
+import fitz
 
 
 class PDFExtractionError(Exception):
@@ -54,7 +54,6 @@ def extract_pages_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, Any]]:
     finally:
         doc.close()
 
-    # Detect scanned or image-only documents
     if total_words == 0:
         raise PDFExtractionError(
             "Scanned or image-only PDF: No extractable text found. "

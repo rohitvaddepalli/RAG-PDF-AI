@@ -39,7 +39,6 @@ def test_extract_corrupted_pdf_raises_error():
 
 
 def test_scanned_zero_text_pdf_raises_error():
-    # Empty page with 0 text
     doc = fitz.open()
     doc.new_page()
     pdf_bytes = doc.write()

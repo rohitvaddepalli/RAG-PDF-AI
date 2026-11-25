@@ -11,11 +11,11 @@ def test_split_text_small():
 
 
 def test_split_text_long_with_overlap():
-    long_text = "Sentence number one. " * 50  # ~1050 chars
+    long_text = "Sentence number one. " * 50
     chunks = split_text_recursive(long_text, chunk_size=500, chunk_overlap=100)
     assert len(chunks) >= 2
     for chunk in chunks:
-        assert len(chunk) <= 600  # Within bounds
+        assert len(chunk) <= 600
 
 
 def test_chunk_pages_preserves_page_numbers():

@@ -10,7 +10,6 @@ class DocumentStore:
     """In-memory vector store managing documents, chunks, and embeddings."""
 
     def __init__(self):
-        # document_id -> { "chunks": [...], "embeddings": np.ndarray, "page_count": int, "file_name": str }
         self._store: Dict[str, Dict[str, Any]] = {}
 
     def add_document(
@@ -70,12 +69,11 @@ class DocumentStore:
             raise KeyError(f"Document with ID '{document_id}' not found.")
 
         chunks = doc["chunks"]
-        matrix = doc["embeddings"]  # Shape (N, 384)
+        matrix = doc["embeddings"]
 
         if len(chunks) == 0 or matrix.shape[0] == 0:
             return []
 
-        # Cosine similarity: (matrix @ query) / (||matrix|| * ||query||)
         query_norm = np.linalg.norm(query_vector)
         if query_norm == 0:
             return []
@@ -94,7 +92,7 @@ class DocumentStore:
         for idx in sorted_indices:
             score = float(similarities[idx])
             if score < threshold:
-                break  # Any remaining elements will also be below threshold
+                break
 
             chunk_info = chunks[idx]
             results.append({
