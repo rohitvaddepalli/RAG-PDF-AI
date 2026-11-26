@@ -1,5 +1,3 @@
-"""Service for synthesizing grounded answers using the Google Gemini GenAI SDK."""
-
 import re
 from typing import Any, Dict, List, Optional
 from google import genai
@@ -25,7 +23,6 @@ SYSTEM_PROMPT: str = (
 
 
 def sanitize_error_message(error_str: str) -> str:
-    """Mask any potential API key or authorization token occurrences in error strings."""
     sanitized = re.sub(r"AIza[0-9A-Za-z\-_]{35}", "[REDACTED_API_KEY]", error_str)
     sanitized = re.sub(r"(?i)(key|api[_-]?key)=([a-zA-Z0-9_\-]+)", r"\1=[REDACTED]", sanitized)
     sanitized = re.sub(r"(?i)bearer\s+[a-zA-Z0-9_\-\.]+", "Bearer [REDACTED_TOKEN]", sanitized)
@@ -33,8 +30,6 @@ def sanitize_error_message(error_str: str) -> str:
 
 
 class LLMService:
-    """Service wrapping Google Gemini generation calls."""
-
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
         self.model_name = model_name or settings.GEMINI_MODEL
@@ -48,7 +43,6 @@ class LLMService:
         return genai.Client(api_key=key.strip())
 
     def build_prompt(self, question: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """Construct the grounded context prompt for Gemini."""
         context_blocks = []
         for idx, chunk in enumerate(context_chunks, start=1):
             page_num = chunk.get("page", "?")

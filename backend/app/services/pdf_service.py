@@ -1,12 +1,11 @@
-"""Service for extracting and validating text from PDF documents using PyMuPDF."""
-
 from typing import Any, Dict, List
 import fitz
 
 
 class PDFExtractionError(Exception):
-    """Raised when PDF extraction fails due to formatting, corruption, or scanning."""
-    pass
+    def __init__(self, message: str = "Failed to extract text from PDF.") -> None:
+        self.message = message
+        super().__init__(message)
 
 
 def extract_pages_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, Any]]:

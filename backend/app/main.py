@@ -20,11 +20,11 @@ from app.services.retrieval_service import document_store
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager to load resources once at startup."""
-    print("🚀 Initializing embedding model...")
+    print("Initializing embedding model...")
     embedding_service.load_model()
-    print("✅ Embedding model loaded successfully.")
+    print("Embedding model loaded successfully.")
     yield
-    print("🛑 Shutting down RAG PDF AI backend.")
+    print("Shutting down RAG PDF AI backend.")
 
 
 app = FastAPI(

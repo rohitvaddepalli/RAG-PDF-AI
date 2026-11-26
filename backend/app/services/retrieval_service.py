@@ -1,5 +1,3 @@
-"""Service for in-memory vector storage and NumPy cosine similarity retrieval."""
-
 from typing import Any, Dict, List, Optional
 import numpy as np
 
@@ -7,8 +5,6 @@ from app.config import settings
 
 
 class DocumentStore:
-    """In-memory vector store managing documents, chunks, and embeddings."""
-
     def __init__(self):
         self._store: Dict[str, Dict[str, Any]] = {}
 
@@ -20,7 +16,6 @@ class DocumentStore:
         page_count: int,
         file_name: Optional[str] = None,
     ) -> None:
-        """Store document chunks and matrix in memory."""
         self._store[document_id] = {
             "chunks": chunks,
             "embeddings": embeddings,
@@ -29,18 +24,15 @@ class DocumentStore:
         }
 
     def get_document(self, document_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve stored document by ID."""
         return self._store.get(document_id)
 
     def delete_document(self, document_id: str) -> bool:
-        """Delete stored document by ID."""
         if document_id in self._store:
             del self._store[document_id]
             return True
         return False
 
     def document_count(self) -> int:
-        """Return total number of documents currently stored."""
         return len(self._store)
 
     def search(

@@ -11,7 +11,6 @@ from app.services.embedding_service import embedding_service
 
 @pytest.fixture(scope="module", autouse=True)
 def init_test_embedding_model():
-    """Ensure embedding model is loaded for test suite."""
     embedding_service.load_model()
 
 
